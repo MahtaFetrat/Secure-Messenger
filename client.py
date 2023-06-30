@@ -4,7 +4,7 @@ from entities import Chat, Message
 from utils import check_password_strength, create_end_to_end_message, read_end_to_end_message
 from random import randint
 
-BUFFSIZE = 1024
+BUFFSIZE = 250
 
 class Client:
     def __init__(self):

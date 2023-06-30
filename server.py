@@ -2,7 +2,7 @@ import socket
 from threading import Thread
 from entities import ClientInfo, Chat, Message, GroupInfo
 
-BUFFSIZE = 1024
+BUFFSIZE = 250
 
 class Server:
     IP = "127.0.0.1"
