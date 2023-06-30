@@ -203,6 +203,10 @@ class ClientHandler(Thread):
         if username not in self.server.groups:
             self.client_info.conn.send("Group Not Found".encode())
             return
+        # TODO: control authenticity of the message in upper layer
+        if self.client_info.username != self.server.groups[username].owner:
+            self.client_info.conn.send("Permission Denied".encode())
+            return
         else:
             self.client_info.conn.send("OK".encode())
             user = self.client_info.conn.recv(BUFFSIZE).decode()
@@ -211,13 +215,17 @@ class ClientHandler(Thread):
             else:
                 self.client_info.conn.send("User Added".encode())
                 self.server.groups[username].members.add(user)
-                self.add_group_member(username, user)
+                self.send_group_to_member(username, user)
 
 
     def remove_group_member(self):
         username = self.client_info.conn.recv(BUFFSIZE).decode()
         if username not in self.server.groups:
             self.client_info.conn.send("Group Not Found".encode())
+            return
+        # TODO: control authenticity of the message in upper layer
+        if self.client_info.username != self.server.groups[username].owner:
+            self.client_info.conn.send("Permission Denied".encode())
             return
         else:
             self.client_info.conn.send("OK".encode())
