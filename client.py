@@ -1,6 +1,7 @@
 import socket
 from server import Server
 from entities import Chat, Message
+from utils import check_password_strength
 
 BUFFSIZE = 1024
 
@@ -127,20 +128,28 @@ class App:
         self.client.username = input()
         self.client.sock.send(self.client.username.encode())
 
-        print("Please pick a password:")
-        self.client.password = input()
-        self.client.sock.send(self.client.password.encode())
-
         response = self.client.sock.recv(BUFFSIZE).decode()
-        if response == "OK": return True
-        else:
+        if response != "OK":
             print(response)
             return False
+        
+        self.client.password = self.select_password()
+        self.client.sock.send(self.client.password.encode())
+        return True
+
+    def select_password(self):
+        print("Please pick a password:")
+        while True:
+            password = input()
+            if check_password_strength(password): return password
+            print("The password must be at least 8 charachters and contain at least one uppercase letter,")
+            print("one lowercase letter, one digit, and one special charachter!")
+
 
     def login(self):
         print("Please enter your username:")
         self.client.sock.send(input().encode())
-
+        
         print("Please enter your password:")
         self.client.sock.send(input().encode())
 

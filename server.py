@@ -50,14 +50,14 @@ class Server:
             self.run_login_menu(conn)               
 
     def run_registration_menu(self, conn):
-        username = conn.recv(BUFFSIZE).decode()         
-        password = conn.recv(BUFFSIZE).decode()
+        username = conn.recv(BUFFSIZE).decode()  
 
         if username in self.clients or username in self.groups:
             conn.send("Username Taken".encode())
             return False
         else:
-            conn.send("OK".encode())
+            conn.send("OK".encode())   
+            password = conn.recv(BUFFSIZE).decode()
             self.clients[username] = ClientInfo(username, password, conn)
             return True
         
