@@ -84,29 +84,39 @@ class ClientHandler(Thread):
     def run(self):
         while True:
             message = self.client_info.conn.recv(1024).decode()
+            print(f"Received '{message}' from {self.client_info.username}.")
 
             if not message:
                 self.server.online_clients.remove(self.client_info.username)
                 return
             
             input_option = int(message)
-            self.APP_MENU_FUNCTIONS[input_option - 1]()
+            try:
+                self.APP_MENU_FUNCTIONS[input_option - 1]()
+            except ConnectionResetError:
+                print("An existing connection was forcibly closed by the remote host")
+                break
 
-            print(f"Received '{message}' from {self.client_info.username}.")
 
     def see_inbox(self):
         new_chats = self.server.new_chats.get(self.client_info.username, {})
         self.client_info.conn.send(f"{len(new_chats)}".encode())
+        self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
+        print(len(new_chats))
         for username in new_chats.keys():
             self.client_info.conn.send(f"{username}".encode())
             self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
+            print(username)
             self.client_info.conn.send(f"{len(new_chats[username].messages)}".encode())
             self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
+            print(len(new_chats[username].messages))
             for message in new_chats[username].messages:
                 self.client_info.conn.send(message.sender.encode())
                 self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
+                print(message.sender)
                 self.client_info.conn.send(message.text.encode())
                 self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
+                print(message.text)
 
         self.server.new_chats[self.client_info.username] = {}
 
@@ -115,6 +125,8 @@ class ClientHandler(Thread):
         self.client_info.conn.send(online_users_list.encode())
 
     def send_message(self):
+        self.see_inbox()
+
         username = self.client_info.conn.recv(BUFFSIZE).decode()
         if username not in self.server.clients and username not in self.server.groups:
             self.client_info.conn.send("Username Not Found".encode())

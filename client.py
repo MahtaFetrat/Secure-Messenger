@@ -1,7 +1,8 @@
 import socket
 from server import Server
 from entities import Chat, Message
-from utils import check_password_strength
+from utils import check_password_strength, create_end_to_end_message, read_end_to_end_message
+from random import randint
 
 BUFFSIZE = 1024
 
@@ -22,6 +23,7 @@ class App:
     def __init__(self, client):
         self.client = client
         self.chats = {}
+        self.sequence_numbers = {}
 
         self.APP_MENU_OPTIONS = ["See inbox", "See online users", "Send a message", "Create new group", "Add group member", "Remove group member", "See chat", "Quit"]
         self.APP_MENU_FUNCTIONS = [self.see_inbox_menu, self.see_online_users, self.send_message_menu, self.create_new_group, self.add_group_member, self.remove_group_member]
@@ -73,19 +75,23 @@ class App:
 
     def update_unread_messages(self):
         new_chat_count = int(self.client.sock.recv(BUFFSIZE).decode())
+        self.client.sock.send("ACK".encode())
         for _ in range(new_chat_count):
             username = self.client.sock.recv(BUFFSIZE).decode()
             self.client.sock.send("ACK".encode())
             if username not in self.chats: self.chats[username] = Chat(username)
             new_messages = int(self.client.sock.recv(BUFFSIZE).decode())
             self.client.sock.send("ACK".encode())
-            self.chats[username].unread_message_count += new_messages
             for _ in range(new_messages):
                 sender = self.client.sock.recv(BUFFSIZE).decode()
                 self.client.sock.send("ACK".encode())
-                text = self.client.sock.recv(BUFFSIZE).decode()
+                e2e_message = self.client.sock.recv(BUFFSIZE).decode()
                 self.client.sock.send("ACK".encode())
-                self.chats[username].messages.append(Message(sender, text))
+                sequence_number, message = read_end_to_end_message(username, e2e_message, self.sequence_numbers)
+                if sequence_number: 
+                    self.chats[username].unread_message_count += 1
+                    self.sequence_numbers[username] += 1
+                    self.chats[username].messages.append(Message(sender, message))
 
     def see_chat_menu(self):
         print("Please enter the chat you want to see:")
@@ -108,6 +114,8 @@ class App:
         print(online_users)
 
     def send_message_menu(self):
+        self.update_unread_messages()
+
         print("Please enter the chat you want to send a message to:")
         username = input()
         self.client.sock.send(username.encode())
@@ -117,11 +125,14 @@ class App:
             return
         
         print("Please enter your message:")
+        if username not in self.sequence_numbers: self.sequence_numbers[username] = randint(1, 1e6)
         message = input()
-        self.client.sock.send(message.encode())
+        e2e_message = create_end_to_end_message(username, message, self.sequence_numbers)
+        self.client.sock.send(e2e_message.encode())
 
         if username not in self.chats: self.chats[username] = Chat(username)
         self.chats[username].messages.append(Message(self.client.username, message))
+
 
     def register(self):
         print("Please pick a username:")
@@ -136,6 +147,7 @@ class App:
         self.client.password = self.select_password()
         self.client.sock.send(self.client.password.encode())
         return True
+
 
     def select_password(self):
         print("Please pick a password:")
