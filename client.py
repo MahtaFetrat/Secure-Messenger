@@ -175,7 +175,9 @@ class App:
         print("Please enter the name of the group:")
         username = input()
         self.client.sock.send(username.encode())
+        print(username)
         response = self.client.sock.recv(BUFFSIZE).decode()
+        print(response)
         if response != "OK":
             print(response)
             return

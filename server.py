@@ -42,12 +42,16 @@ class Server:
             Thread(target=self.handle_connection, args=(conn,)).start()
 
     def handle_connection(self, conn):
-        while True:
-            input_option = conn.recv(BUFFSIZE).decode()
-            if input_option == "2":
-                if self.run_registration_menu(conn) and self.run_login_menu(conn): return
-            if input_option == "1":
-                if self.run_login_menu(conn): return 
+        try:
+            while True:
+                input_option = conn.recv(BUFFSIZE).decode()
+                if input_option == "2":
+                    if self.run_registration_menu(conn) and self.run_login_menu(conn): return
+                if input_option == "1":
+                    if self.run_login_menu(conn): return 
+        except ConnectionResetError:
+            print("An existing connection was forcibly closed by the remote host")
+
 
 
     def run_registration_menu(self, conn):
@@ -71,8 +75,10 @@ class Server:
             self.online_clients.add(username)
             self.clients[username].conn = conn
             ClientHandler(self.clients[username], self).start()
+            return True
         else:
             conn.send("Login Failed".encode())
+            return False
 
 class ClientHandler(Thread):
     def __init__(self, client_info, server):
@@ -157,12 +163,15 @@ class ClientHandler(Thread):
             self.server.new_chats[member][username].messages.append(message)
 
     def create_new_group(self):
+        print("at least im here :)")
         username = self.client_info.conn.recv(BUFFSIZE).decode()
+        print(username)
         if username in self.server.clients or username in self.server.groups:
             self.client_info.conn.send("Username Taken".encode())
             return
         else:
             self.client_info.conn.send("OK".encode())
+            print("hi")
             members = self.get_group_member_set()
             self.server.groups[username] = GroupInfo(username, self.client_info.username, members)
             self.send_group_to_members(username)
