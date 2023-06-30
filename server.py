@@ -42,12 +42,13 @@ class Server:
             Thread(target=self.handle_connection, args=(conn,)).start()
 
     def handle_connection(self, conn):
-        input_option = conn.recv(BUFFSIZE).decode()
-        if input_option == "2":
-            if self.run_registration_menu(conn):
-                self.run_login_menu(conn)
-        if input_option == "1":
-            self.run_login_menu(conn)               
+        while True:
+            input_option = conn.recv(BUFFSIZE).decode()
+            if input_option == "2":
+                if self.run_registration_menu(conn) and self.run_login_menu(conn): return
+            if input_option == "1":
+                if self.run_login_menu(conn): return 
+
 
     def run_registration_menu(self, conn):
         username = conn.recv(BUFFSIZE).decode()  
