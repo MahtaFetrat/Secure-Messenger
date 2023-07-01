@@ -1,7 +1,7 @@
 import hashlib
 import string
 from elgamal import elgamal_encrypt, elgamal_decrypt
-
+import math
 
 def sha3_256_hash(message):
     hash_object = hashlib.sha3_256()
@@ -51,3 +51,23 @@ def read_e2e_message(username, sequence_numbers, C1, C2, elgamal_key):
         return 0, ""
     else:
         return sequence_number, message
+    
+def send(message, sock, BUFFSIZE=175):
+    message_lenght = len(message)
+    chuncks = math.ceil(message_lenght / BUFFSIZE)
+    sock.send(str(chuncks).encode())
+    sock.recv(BUFFSIZE).decode()    # ACK
+    for chunk in range(chuncks):
+        sock.send(message[chunk * BUFFSIZE:(chunk + 1) * BUFFSIZE].encode())
+        sock.recv(BUFFSIZE).decode()    # ACK
+
+def receive(sock, BUFFSIZE):
+    chunks = int(sock.recv(BUFFSIZE).decode())
+    sock.send("ACK".encode())
+
+    message_parts = []
+    for chunk in range(chuncks):
+        message_parts.append(sock.recv(BUFFSIZE).decode())
+        sock.send("ACK".encode())    # ACK
+
+    return ''.join(message_parts)

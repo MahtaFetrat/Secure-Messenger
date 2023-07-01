@@ -1,6 +1,7 @@
 import socket
 from threading import Thread
 from entities import ClientInfo, Chat, Message, GroupInfo
+from utils import send, receive
 
 BUFFSIZE = 175
 
@@ -56,14 +57,14 @@ class Server:
         username = conn.recv(BUFFSIZE).decode()  
 
         if username in self.clients or username in self.groups:
-            conn.send("Username Taken".encode())
+            send("Username Taken", conn)
             return False
         else:
-            conn.send("OK".encode())   
+            send("OK", conn)   
             password = conn.recv(BUFFSIZE).decode()
-            conn.send("ACK".encode())   # ACK
+            send("ACK", conn)   # ACK
             elgamal_key = conn.recv(BUFFSIZE).decode()
-            conn.send("ACK".encode())   # ACK
+            send("ACK", conn)   # ACK
 
             self.clients[username] = ClientInfo(username, password, conn, elgamal_key)
             return True
@@ -73,14 +74,14 @@ class Server:
         password = conn.recv(BUFFSIZE).decode()
 
         if username in self.clients and password == self.clients[username].password:
-            conn.send("OK".encode())
+            send("OK", conn)
             self.online_clients.add(username)
             self.clients[username].conn = conn
             ClientHandler(self.clients[username], self).start()
             return True
         else:
             print(self.clients[username].password)
-            conn.send("Login Failed".encode())
+            send("Login Failed", conn)
             return False
 
 
@@ -111,44 +112,44 @@ class ClientHandler(Thread):
 
     def see_inbox(self):
         new_chats = self.server.new_chats.get(self.client_info.username, {})
-        self.client_info.conn.send(f"{len(new_chats)}".encode())
-        self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
+        send(f"{len(new_chats)}", self.client_info.conn)
+        receive(self.client_info.conn)   # ACK
         print(len(new_chats))
         for username in new_chats.keys():
-            self.client_info.conn.send(f"{username}".encode())
+            send(f"{username}", self.client_info.conn)
             self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
-            self.client_info.conn.send(f"{len(new_chats[username].messages)}".encode())
+            send(f"{len(new_chats[username].messages)}", self.client_info.conn)
             self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
             for message in new_chats[username].messages:
-                self.client_info.conn.send(message.sender.encode())
+                send(message.sender, self.client_info.conn)
                 self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
-                self.client_info.conn.send(message.C1.encode())
+                send(message.C1, self.client_info.conn)
                 self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
-                self.client_info.conn.send(message.C2.encode())
+                send(message.C2, self.client_info.conn)
                 self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
 
         self.server.new_chats[self.client_info.username] = {}
 
     def see_online_users(self):
         online_users_list = f"\n{'-'*20}\n".join(list(self.server.online_clients))
-        self.client_info.conn.send(online_users_list.encode())
+        send(online_users_list, self.client_info.conn)
 
     def send_message(self):
         self.see_inbox()
 
         username = self.client_info.conn.recv(BUFFSIZE).decode()
         if username not in self.server.clients and username not in self.server.groups:
-            self.client_info.conn.send("Username Not Found".encode())
+            send("Username Not Found", self.client_info.conn)
             return
         else:
-            self.client_info.conn.send("OK".encode())
+            send("OK", self.client_info.conn)
 
             if not self.resolve_elgamal_key(username): return
             
             C1 = self.client_info.conn.recv(BUFFSIZE).decode()
-            self.client.sock.send("ACK".encode())    # ACK
+            send("ACK", self.client_info.conn)    # ACK
             C2 = self.client_info.conn.recv(BUFFSIZE).decode()
-            self.client.sock.send("ACK".encode())    # ACK
+            send("ACK", self.client_info.conn)    # ACK
 
             message = Message(self.client_info.username, C1=C1, C2=C2)
             if username in self.server.clients:
@@ -162,14 +163,14 @@ class ClientHandler(Thread):
             return True
         
         if username not in self.server.clients:
-            self.client_info.conn.send("User Not Found".encode())
+            send("User Not Found", self.client_info.conn)
             return False
         
-        self.client_info.conn.send("OK".encode())
+        send("OK", self.client_info.conn)
         
         username = self.client_info.conn.recv(BUFFSIZE).decode()
         elgamal_key = self.server.clients[username].elgamal_key
-        self.client_info.conn.send(elgamal_key.encode())
+        send(elgamal_key, self.client_info.conn)
 
     def send_private_message(self, username, message):
         if username not in self.server.new_chats: self.server.new_chats[username] = {}
@@ -191,10 +192,10 @@ class ClientHandler(Thread):
         username = self.client_info.conn.recv(BUFFSIZE).decode()
         print(username)
         if username in self.server.clients or username in self.server.groups:
-            self.client_info.conn.send("Username Taken".encode())
+            send("Username Taken", self.client_info.conn)
             return
         else:
-            self.client_info.conn.send("OK".encode())
+            send("OK", self.client_info.conn)
             print("hi")
             members = self.get_group_member_set()
             self.server.groups[username] = GroupInfo(username, self.client_info.username, members)
@@ -207,9 +208,9 @@ class ClientHandler(Thread):
         for _ in range(member_count):
             user = self.client_info.conn.recv(BUFFSIZE).decode()
             if user not in self.server.clients:
-                self.client_info.conn.send("User Not Found".encode())
+                send("User Not Found", self.client_info.conn)
             else:
-                self.client_info.conn.send("User Added".encode())
+                send("User Added", self.client_info.conn)
                 members.add(user)
     
         return members
@@ -225,19 +226,19 @@ class ClientHandler(Thread):
     def add_group_member(self):
         username = self.client_info.conn.recv(BUFFSIZE).decode()
         if username not in self.server.groups:
-            self.client_info.conn.send("Group Not Found".encode())
+            send("Group Not Found", self.client_info.conn)
             return
         # TODO: control authenticity of the message in upper layer
         if self.client_info.username != self.server.groups[username].owner:
-            self.client_info.conn.send("Permission Denied".encode())
+            send("Permission Denied", self.client_info.conn)
             return
         else:
-            self.client_info.conn.send("OK".encode())
+            send("OK", self.client_info.conn)
             user = self.client_info.conn.recv(BUFFSIZE).decode()
             if user not in self.server.clients:
-                self.client_info.conn.send("User Not Found".encode())
+                send("User Not Found", self.client_info.conn)
             else:
-                self.client_info.conn.send("User Added".encode())
+                send("User Added", self.client_info.conn)
                 self.server.groups[username].members.add(user)
                 self.send_group_to_member(username, user)
 
@@ -245,19 +246,19 @@ class ClientHandler(Thread):
     def remove_group_member(self):
         username = self.client_info.conn.recv(BUFFSIZE).decode()
         if username not in self.server.groups:
-            self.client_info.conn.send("Group Not Found".encode())
+            send("Group Not Found", self.client_info.conn)
             return
         # TODO: control authenticity of the message in upper layer
         if self.client_info.username != self.server.groups[username].owner:
-            self.client_info.conn.send("Permission Denied".encode())
+            send("Permission Denied", self.client_info.conn)
             return
         else:
-            self.client_info.conn.send("OK".encode())
+            send("OK", self.client_info.conn)
             user = self.client_info.conn.recv(BUFFSIZE).decode()
             if user not in self.server.groups[username].members:
-                self.client_info.conn.send("User Not a Member of This Group".encode())
+                send("User Not a Member of This Group", self.client_info.conn)
             else:
-                self.client_info.conn.send("User Removed".encode())
+                send("User Removed", self.client_info.conn)
                 self.server.groups[username].members.remove(user)
 
 
