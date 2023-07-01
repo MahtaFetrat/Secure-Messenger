@@ -80,7 +80,6 @@ class Server:
             ClientHandler(self.clients[username], self).start()
             return True
         else:
-            print(self.clients[username].password)
             send("Login Failed", conn)
             return False
 
@@ -114,7 +113,6 @@ class ClientHandler(Thread):
         new_chats = self.server.new_chats.get(self.client_info.username, {})
         send(f"{len(new_chats)}", self.client_info.conn)
         receive(self.client_info.conn)   # ACK
-        print(len(new_chats))
         for username in new_chats.keys():
             send(f"{username}", self.client_info.conn)
             receive(self.client_info.conn)   # ACK
@@ -144,7 +142,7 @@ class ClientHandler(Thread):
         else:
             send("OK", self.client_info.conn)
 
-            if not self.resolve_elgamal_key(username): return
+            self.resolve_elgamal_key(username)
             
             C1 = receive(self.client_info.conn)
             send("ACK", self.client_info.conn)    # ACK
@@ -159,16 +157,8 @@ class ClientHandler(Thread):
 
     def resolve_elgamal_key(self, username):
         request = receive(self.client_info.conn)
-        if request == "OK":
-            return True
+        if request == "OK": return
         
-        if username not in self.server.clients:
-            send("User Not Found", self.client_info.conn)
-            return False
-        
-        send("OK", self.client_info.conn)
-        
-        username = receive(self.client_info.conn)
         elgamal_key = self.server.clients[username].elgamal_key
         send(elgamal_key, self.client_info.conn)
 
@@ -190,13 +180,11 @@ class ClientHandler(Thread):
     def create_new_group(self):
         print("at least im here :)")
         username = receive(self.client_info.conn)
-        print(username)
         if username in self.server.clients or username in self.server.groups:
             send("Username Taken", self.client_info.conn)
             return
         else:
             send("OK", self.client_info.conn)
-            print("hi")
             members = self.get_group_member_set()
             self.server.groups[username] = GroupInfo(username, self.client_info.username, members)
             self.send_group_to_members(username)

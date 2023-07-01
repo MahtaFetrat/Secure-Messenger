@@ -20,7 +20,10 @@ class ElgamalKey():
     self.q = q
     self.α = α
     self.Y = Y
+    
     self.X = X
+    
+    self.mod_size=mod_size
 
   def unpack(self):
     return (self.q, self.α, self.Y), self.X
@@ -35,18 +38,19 @@ def elgamal_encrypt(m, elgamal_key):
   k = pow(Y, r, q)
   C1 = pow(α, r, q)
   C2 = (k * M) % q
-  return (C1, C2)
+  return (str(C1), str(C2))
 
 
 def elgamal_decrypt(C1, C2, elgamal_key):
   (q, α, Y), X = elgamal_key.unpack()
 
+  C1, C2 = int(C1), int(C2)
   k = pow(C1, X, q)
   dec_M = (C2 * inverse(k, q)) % q
   hex_M = format(dec_M, 'x')
   # make hex_M of even length required by unhexlify
   hex_M = '0' + hex_M if len(hex_M) % 2 != 0 else hex_M
-  return unhexlify(hex_M)
+  return unhexlify(hex_M).decode()
 
 
 def elgamal_generate_key(mod_size=1e250):

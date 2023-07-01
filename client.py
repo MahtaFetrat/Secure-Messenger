@@ -77,7 +77,7 @@ class App:
             print(f"{username} [{chat.unread_message_count}]" if chat.unread_message_count else username)
 
     def update_unread_messages(self):
-        new_chat_count = int(receive(self.client.sock).decode())
+        new_chat_count = int(receive(self.client.sock))
         send("ACK", self.client.sock)
         for _ in range(new_chat_count):
             username = receive(self.client.sock)
@@ -129,12 +129,12 @@ class App:
             print(response)
             return
         
-        if not self.resolve_elgamal_key(username): return
+        self.resolve_elgamal_key(username)
         
         print("Please enter your message:")
         if username not in self.sequence_numbers: self.sequence_numbers[username] = randint(1, 1e6)
         message = input()
-        C1, C2 = create_e2e_message(username, message, self.sequence_numbers, self.elgamal_keys[username], BUFFSIZE)
+        C1, C2 = create_e2e_message(username, message, self.sequence_numbers, self.elgamal_keys[username])
         send(C1, self.client.sock)
         receive(self.client.sock)    # ACK
         send(C2, self.client.sock)
@@ -146,13 +146,6 @@ class App:
     def resolve_elgamal_key(self, username):
         if username not in self.elgamal_keys:
             send("Get Key", self.client.sock)
-            receive(BUFFSIZE)    # ACK
-            send(username, self.client.sock)
-            response = receive(self.client.sock)
-            if response != "OK":
-                print(response)
-                return False
-
             key_params = receive(self.client.sock)
             (q, α, Y) = tuple(map(int, key_params.split('\n\n')))
             self.elgamal_keys[username] = ElgamalKey(q, α, Y)
@@ -196,7 +189,6 @@ class App:
         print("Please enter your password:")
         hashed_password = sha3_256_hash(input())
         send(hashed_password, self.client.sock)
-        print(hashed_password)
 
         response = receive(self.client.sock)
         if response == "OK": return True
@@ -208,9 +200,7 @@ class App:
         print("Please enter the name of the group:")
         username = input()
         send(username, self.client.sock)
-        print(username)
         response = receive(self.client.sock)
-        print(response)
         if response != "OK":
             print(response)
             return

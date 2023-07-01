@@ -26,20 +26,16 @@ def check_password_strength(password):
 
 
 def create_e2e_message(username, message, sequence_numbers, elgamal_key):
-    (q, α, Y), X = elgamal_key.unpack()
-
     FORMAT = "{sequence_numbers}\n\n{message}"
     sequence_numbers[username] += 1
     formatted_message = FORMAT.format(
         sequence_numbers=sequence_numbers[username],
         message=message
     )
-    return elgamal_encrypt(formatted_message, q, α, Y, elgamal_key.mod_size)
+    return elgamal_encrypt(formatted_message, elgamal_key)
 
 def read_e2e_message(username, sequence_numbers, C1, C2, elgamal_key):
-    (q, α, Y), X = elgamal_key.unpack()
-
-    decrypted_message = elgamal_decrypt(X, C1, C2, q)
+    decrypted_message = elgamal_decrypt(C1, C2, elgamal_key)
     splitted_message = decrypted_message.split("\n\n")
     sequence_number = int(splitted_message[0])
     message = '\n\n'.join(splitted_message[1:])
@@ -61,7 +57,7 @@ def send(message, sock, BUFFSIZE=175):
         sock.send(message[chunk * BUFFSIZE:(chunk + 1) * BUFFSIZE].encode())
         sock.recv(BUFFSIZE).decode()    # ACK
 
-def receive(sock, BUFFSIZE):
+def receive(sock, BUFFSIZE=175):
     chunks = int(sock.recv(BUFFSIZE).decode())
     sock.send("ACK".encode())
 
