@@ -5,11 +5,13 @@ class ClientInfo:
         self.conn = conn
         self.elgamal_key = elgamal_key
 
+
 class GroupInfo:
     def __init__(self, username, owner, members):
         self.username = username
         self.owner = owner
         self.members = members
+
 
 class Chat:
     def __init__(self, username):

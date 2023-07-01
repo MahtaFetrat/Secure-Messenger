@@ -3,7 +3,7 @@ from threading import Thread
 from entities import ClientInfo, Chat, Message, GroupInfo
 from utils import send, receive
 
-BUFFSIZE = 175
+BUFFSIZE = 1024
 
 class Server:
     IP = "127.0.0.1"
@@ -94,17 +94,17 @@ class ClientHandler(Thread):
 
     def run(self):
         while True:
-            message = receive(self.client_info.conn)
-            print(f"Received '{message}' from {self.client_info.username}.")
-
-            if not message:
-                self.server.online_clients.remove(self.client_info.username)
-                return
-            
-            input_option = int(message)
             try:
+                message = receive(self.client_info.conn)
+                print(f"Received '{message}' from {self.client_info.username}.")
+
+                if not message:
+                    self.server.online_clients.remove(self.client_info.username)
+                    return
+                
+                input_option = int(message)
                 self.APP_MENU_FUNCTIONS[input_option - 1]()
-            except ConnectionResetError:
+            except (ConnectionResetError, ConnectionAbortedError):
                 print("An existing connection was forcibly closed by the remote host")
                 break
 
@@ -139,21 +139,37 @@ class ClientHandler(Thread):
         if username not in self.server.clients and username not in self.server.groups:
             send("Username Not Found", self.client_info.conn)
             return
+        if username in self.server.clients:
+            send("User Found", self.client_info.conn)
+            self.send_message_to_user(username, self.client_info.username)
         else:
-            send("OK", self.client_info.conn)
+            send("Group Found", self.client_info.conn)
+            self.send_message_to_group(username)
 
-            self.resolve_elgamal_key(username)
-            
-            C1 = receive(self.client_info.conn)
-            send("ACK", self.client_info.conn)    # ACK
-            C2 = receive(self.client_info.conn)
-            send("ACK", self.client_info.conn)    # ACK
+    def send_message_to_user(self, username, sender_username):
+        self.resolve_elgamal_key(username)
+        
+        C1 = receive(self.client_info.conn)
+        send("ACK", self.client_info.conn)    # ACK
+        C2 = receive(self.client_info.conn)
+        send("ACK", self.client_info.conn)    # ACK
 
-            message = Message(self.client_info.username, C1=C1, C2=C2)
-            if username in self.server.clients:
-                self.send_private_message(username, message)
-            else:
-                self.send_group_message(username, message)
+        message = Message(self.client_info.username, C1=C1, C2=C2)
+        if username not in self.server.new_chats: self.server.new_chats[username] = {}
+        if sender_username not in self.server.new_chats[username]:
+            self.server.new_chats[username][sender_username] = Chat(sender_username)
+        self.server.new_chats[username][sender_username].messages.append(message)
+        
+    def send_message_to_group(self, username):
+        send(f"{len(self.server.groups[username].members) - 1}", self.client_info.conn)
+        receive(self.client_info.conn)  # ACK
+
+        for member in self.server.groups[username].members:
+            if member == self.client_info.username: continue
+            send(member, self.client_info.conn)
+            receive(self.client_info.conn)  # ACK
+
+            self.send_message_to_user(member, username)
 
     def resolve_elgamal_key(self, username):
         request = receive(self.client_info.conn)
@@ -162,23 +178,7 @@ class ClientHandler(Thread):
         elgamal_key = self.server.clients[username].elgamal_key
         send(elgamal_key, self.client_info.conn)
 
-    def send_private_message(self, username, message):
-        if username not in self.server.new_chats: self.server.new_chats[username] = {}
-        if self.client_info.username not in self.server.new_chats[username]:
-            self.server.new_chats[username][self.client_info.username] = Chat(self.client_info.username)
-        self.server.new_chats[username][self.client_info.username].messages.append(message)
-
-    def send_group_message(self, username, message):
-        for member in self.server.groups[username].members:
-            if member == self.client_info.username: continue
-            if member not in self.server.new_chats:
-                self.server.new_chats[member] = {}
-            if username not in self.server.new_chats[member]:
-                self.server.new_chats[member][username] = Chat(username)
-            self.server.new_chats[member][username].messages.append(message)
-
     def create_new_group(self):
-        print("at least im here :)")
         username = receive(self.client_info.conn)
         if username in self.server.clients or username in self.server.groups:
             send("Username Taken", self.client_info.conn)

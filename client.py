@@ -5,7 +5,8 @@ from utils import sha3_256_hash, check_password_strength, create_e2e_message, re
 from random import randint
 from elgamal import elgamal_generate_key, ElgamalKey
 
-BUFFSIZE = 175
+BUFFSIZE = 1024
+MESSAGE_SIZE = 175
 
 class Client:
     def __init__(self):
@@ -104,7 +105,11 @@ class App:
         self.show_chat(username)
 
     def show_chat(self, username):
-        unread_message_count = self.chats[username].unread_message_count if username in self.chats else 0
+        if username not in self.chats:
+            print("Username does not exist in chats")
+            return
+        
+        unread_message_count = self.chats[username].unread_message_count
         if unread_message_count == 0:
             print('\n'.join([f"{m.sender}: {m.text}" for m in self.chats[username].messages]))
         else:
@@ -125,23 +130,42 @@ class App:
         username = input()
         send(username, self.client.sock)
         response = receive(self.client.sock)
-        if response != "OK":
+        if response != "User Found" and response != "Group Found":
             print(response)
             return
         
-        self.resolve_elgamal_key(username)
-        
-        print("Please enter your message:")
         if username not in self.sequence_numbers: self.sequence_numbers[username] = randint(1, 1e6)
+
+        print("Please enter your message:")
         message = input()
-        C1, C2 = create_e2e_message(username, message, self.sequence_numbers, self.elgamal_keys[username])
+
+        if response == "User Found":
+            self.send_message_to_user(username, message, self.sequence_numbers[username])
+        else:
+            self.send_message_to_group(username, message, self.sequence_numbers[username])
+        
+        self.sequence_numbers[username] += 1
+        if username not in self.chats: self.chats[username] = Chat(username)
+        self.chats[username].messages.append(Message(self.client.username, message))
+        
+    def send_message_to_user(self, username, message, sequence_number):
+        self.resolve_elgamal_key(username)
+
+        C1, C2 = create_e2e_message(message, sequence_number, self.elgamal_keys[username])
         send(C1, self.client.sock)
         receive(self.client.sock)    # ACK
         send(C2, self.client.sock)
         receive(self.client.sock)    # ACK
 
-        if username not in self.chats: self.chats[username] = Chat(username)
-        self.chats[username].messages.append(Message(self.client.username, message))
+    def send_message_to_group(self, username, message, sequence_number):
+        user_count = int(receive(self.client.sock))
+        send("ACK", self.client.sock)   # ACK
+
+        for _ in range(user_count):
+            username = receive(self.client.sock)
+            send("ACK", self.client.sock)   # ACK
+
+            self.send_message_to_user(username, message, sequence_number)
 
     def resolve_elgamal_key(self, username):
         if username not in self.elgamal_keys:

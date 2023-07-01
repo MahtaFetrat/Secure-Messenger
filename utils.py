@@ -25,11 +25,10 @@ def check_password_strength(password):
         return False
 
 
-def create_e2e_message(username, message, sequence_numbers, elgamal_key):
+def create_e2e_message(message, sequence_number, elgamal_key):
     FORMAT = "{sequence_numbers}\n\n{message}"
-    sequence_numbers[username] += 1
     formatted_message = FORMAT.format(
-        sequence_numbers=sequence_numbers[username],
+        sequence_numbers=sequence_number,
         message=message
     )
     return elgamal_encrypt(formatted_message, elgamal_key)
@@ -48,22 +47,26 @@ def read_e2e_message(username, sequence_numbers, C1, C2, elgamal_key):
     else:
         return sequence_number, message
     
-def send(message, sock, BUFFSIZE=175):
-    message_lenght = len(message)
-    chuncks = math.ceil(message_lenght / BUFFSIZE)
-    sock.send(str(chuncks).encode())
-    sock.recv(BUFFSIZE).decode()    # ACK
-    for chunk in range(chuncks):
-        sock.send(message[chunk * BUFFSIZE:(chunk + 1) * BUFFSIZE].encode())
-        sock.recv(BUFFSIZE).decode()    # ACK
+def send(message, sock, BUFFSIZE=1024):
+    # message_lenght = len(message)
+    # chuncks = math.ceil(message_lenght / BUFFSIZE)
+    # sock.send(str(chuncks).encode())
+    # sock.recv(BUFFSIZE).decode()    # ACK
+    # for chunk in range(chuncks):
+    #     sock.send(message[chunk * BUFFSIZE:(chunk + 1) * BUFFSIZE].encode())
+    #     sock.recv(BUFFSIZE).decode()    # ACK
 
-def receive(sock, BUFFSIZE=175):
-    chunks = int(sock.recv(BUFFSIZE).decode())
-    sock.send("ACK".encode())
+    sock.send(message.encode())
 
-    message_parts = []
-    for _ in range(chunks):
-        message_parts.append(sock.recv(BUFFSIZE).decode())
-        sock.send("ACK".encode())    # ACK
+def receive(sock, BUFFSIZE=1024):
+    # chunks = int(sock.recv(BUFFSIZE).decode())
+    # sock.send("ACK".encode())
 
-    return ''.join(message_parts)
+    # message_parts = []
+    # for _ in range(chunks):
+    #     message_parts.append(sock.recv(BUFFSIZE).decode())
+    #     sock.send("ACK".encode())    # ACK
+
+    # return ''.join(message_parts)
+
+    return sock.recv(BUFFSIZE).decode()
