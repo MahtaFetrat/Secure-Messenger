@@ -1,7 +1,7 @@
 import socket
 from server import Server
 from entities import Chat, Message
-from utils import sha3_256_hash, check_password_strength, create_e2e_message, read_e2e_message
+from utils import sha3_256_hash, check_password_strength, create_e2e_message, read_e2e_message, send, receive
 from random import randint
 from elgamal import elgamal_generate_key, ElgamalKey
 
@@ -46,10 +46,10 @@ class App:
 
         input_option = int(input())
         if input_option == 2:
-            self.client.sock.send("2".encode())
+            send("2", self.client.sock)
             return self.register() and self.login()
         if input_option == 1:
-            self.client.sock.send("1".encode())
+            send("1", self.client.sock)
             return self.login()
         
         return False
@@ -67,7 +67,7 @@ class App:
             self.see_chat_menu()
             return False
         
-        self.client.sock.send(f"{input_option}".encode())
+        send(f"{input_option}", self.client.sock)
         self.APP_MENU_FUNCTIONS[input_option - 1]()
         return False
 
@@ -77,21 +77,21 @@ class App:
             print(f"{username} [{chat.unread_message_count}]" if chat.unread_message_count else username)
 
     def update_unread_messages(self):
-        new_chat_count = int(self.client.sock.recv(BUFFSIZE).decode())
-        self.client.sock.send("ACK".encode())
+        new_chat_count = int(receive(self.client.sock).decode())
+        send("ACK", self.client.sock)
         for _ in range(new_chat_count):
-            username = self.client.sock.recv(BUFFSIZE).decode()
-            self.client.sock.send("ACK".encode())
+            username = receive(self.client.sock)
+            send("ACK", self.client.sock)
             if username not in self.chats: self.chats[username] = Chat(username)
-            new_messages = int(self.client.sock.recv(BUFFSIZE).decode())
-            self.client.sock.send("ACK".encode())
+            new_messages = int(receive(self.client.sock))
+            send("ACK", self.client.sock)
             for _ in range(new_messages):
-                sender = self.client.sock.recv(BUFFSIZE).decode()
-                self.client.sock.send("ACK".encode())
-                C1 = self.client.sock.recv(BUFFSIZE).decode()
-                self.client.sock.send("ACK".encode())
-                C2 = self.client.sock.recv(BUFFSIZE).decode()
-                self.client.sock.send("ACK".encode())
+                sender = receive(self.client.sock)
+                send("ACK", self.client.sock)
+                C1 = receive(self.client.sock)
+                send("ACK", self.client.sock)
+                C2 = receive(self.client.sock)
+                send("ACK", self.client.sock)
                 sequence_number, message = read_e2e_message(username, self.sequence_numbers, C1, C2, self.client.elgamal_key)
                 if sequence_number: 
                     self.chats[username].unread_message_count += 1
@@ -115,7 +115,7 @@ class App:
         self.chats[username].unread_message_count = 0
 
     def see_online_users(self):
-        online_users = self.client.sock.recv(BUFFSIZE).decode()
+        online_users = receive(self.client.sock)
         print(online_users)
 
     def send_message_menu(self):
@@ -123,8 +123,8 @@ class App:
 
         print("Please enter the chat you want to send a message to:")
         username = input()
-        self.client.sock.send(username.encode())
-        response = self.client.sock.recv(BUFFSIZE).decode()
+        send(username, self.client.sock)
+        response = receive(self.client.sock)
         if response != "OK":
             print(response)
             return
@@ -135,48 +135,48 @@ class App:
         if username not in self.sequence_numbers: self.sequence_numbers[username] = randint(1, 1e6)
         message = input()
         C1, C2 = create_e2e_message(username, message, self.sequence_numbers, self.elgamal_keys[username], BUFFSIZE)
-        self.client.sock.send(C1.encode())
-        self.client.sock.recv(BUFFSIZE).decode()    # ACK
-        self.client.sock.send(C2.encode())
-        self.client.sock.recv(BUFFSIZE).decode()    # ACK
+        send(C1, self.client.sock)
+        receive(self.client.sock)    # ACK
+        send(C2, self.client.sock)
+        receive(self.client.sock)    # ACK
 
         if username not in self.chats: self.chats[username] = Chat(username)
         self.chats[username].messages.append(Message(self.client.username, message))
 
     def resolve_elgamal_key(self, username):
         if username not in self.elgamal_keys:
-            self.client.sock.send("Get Key".encode())
-            self.client.sock.recv(BUFFSIZE).decode()    # ACK
-            self.client.sock.send(username.encode())
-            response = self.client.sock.recv(BUFFSIZE).decode()
+            send("Get Key", self.client.sock)
+            receive(BUFFSIZE)    # ACK
+            send(username, self.client.sock)
+            response = receive(self.client.sock)
             if response != "OK":
                 print(response)
                 return False
 
-            key_params = self.client.sock.recv(BUFFSIZE).decode()
+            key_params = receive(self.client.sock)
             (q, α, Y) = tuple(map(int, key_params.split('\n\n')))
             self.elgamal_keys[username] = ElgamalKey(q, α, Y)
         else:
-            self.client.sock.send("OK".encode())
+            send("OK", self.client.sock)
 
         return True
 
     def register(self):
         print("Please pick a username:")
         self.client.username = input()
-        self.client.sock.send(self.client.username.encode())
+        send(self.client.username, self.client.sock)
 
-        response = self.client.sock.recv(BUFFSIZE).decode()
+        response = receive(self.client.sock)
         if response != "OK":
             print(response)
             return False
         
         self.client.password = sha3_256_hash(self.select_password())
-        self.client.sock.send(self.client.password.encode())
-        self.client.sock.recv(BUFFSIZE).decode()   # ACK
+        send(self.client.password, self.client.sock)
+        receive(self.client.sock)   # ACK
         (q, α, Y), _ = self.client.elgamal_key.unpack()
-        self.client.sock.send('\n\n'.join(map(str, [q, α, Y])).encode())
-        self.client.sock.recv(BUFFSIZE).decode()   # ACK
+        send('\n\n'.join(map(str, [q, α, Y])), self.client.sock)
+        receive(self.client.sock)   # ACK
         return True
 
 
@@ -191,14 +191,14 @@ class App:
 
     def login(self):
         print("Please enter your username:")
-        self.client.sock.send(input().encode())
+        send(input(), self.client.sock)
         
         print("Please enter your password:")
         hashed_password = sha3_256_hash(input())
-        self.client.sock.send(hashed_password.encode())
+        send(hashed_password, self.client.sock)
         print(hashed_password)
 
-        response = self.client.sock.recv(BUFFSIZE).decode()
+        response = receive(self.client.sock)
         if response == "OK": return True
         else:
             print(response)
@@ -207,9 +207,9 @@ class App:
     def create_new_group(self):
         print("Please enter the name of the group:")
         username = input()
-        self.client.sock.send(username.encode())
+        send(username, self.client.sock)
         print(username)
-        response = self.client.sock.recv(BUFFSIZE).decode()
+        response = receive(self.client.sock)
         print(response)
         if response != "OK":
             print(response)
@@ -220,40 +220,40 @@ class App:
     def send_group_members(self):
         print("How many members you want to add now?")
         member_count = int(input())
-        self.client.sock.send(f"{member_count}".encode())
+        send(f"{member_count}", self.client.sock)
         for _ in range(member_count):
             print("Please enter the next username to add")
             username = input()
-            self.client.sock.send(username.encode())
-            response = self.client.sock.recv(BUFFSIZE).decode()
+            send(username, self.client.sock)
+            response = receive(self.client.sock)
             print(response)
 
     def add_group_member(self):
         print("Please enter the group name")
         username = input()
-        self.client.sock.send(username.encode())
-        response = self.client.sock.recv(BUFFSIZE).decode()
+        send(username, self.client.sock)
+        response = receive(self.client.sock)
         if response != "OK":
             print(response)
             return
         print("Please enter the username to add")
         user = input()
-        self.client.sock.send(user.encode())
-        response = self.client.sock.recv(BUFFSIZE).decode()
+        send(user, self.client.sock)
+        response = receive(self.client.sock)
         print(response)
 
     def remove_group_member(self):
         print("Please enter the group name")
         username = input()
-        self.client.sock.send(username.encode())
-        response = self.client.sock.recv(BUFFSIZE).decode()
+        send(username, self.client.sock)
+        response = receive(self.client.sock)
         if response != "OK":
             print(response)
             return
         print("Please enter the username to remove")
         user = input()
-        self.client.sock.send(user.encode())
-        response = self.client.sock.recv(BUFFSIZE).decode()
+        send(user, self.client.sock)
+        response = receive(self.client.sock)
         print(response)
 
 

@@ -66,7 +66,7 @@ def receive(sock, BUFFSIZE):
     sock.send("ACK".encode())
 
     message_parts = []
-    for chunk in range(chuncks):
+    for _ in range(chunks):
         message_parts.append(sock.recv(BUFFSIZE).decode())
         sock.send("ACK".encode())    # ACK
 
