@@ -1,8 +1,9 @@
 class ClientInfo:
-    def __init__(self, username, password, conn):
+    def __init__(self, username, password, conn, elgamal_key):
         self.username = username
         self.password = password
         self.conn = conn
+        self.elgamal_key = elgamal_key
 
 class GroupInfo:
     def __init__(self, username, owner, members):
@@ -18,7 +19,11 @@ class Chat:
 
 
 class Message:
-    def __init__(self, sender, text):
+    def __init__(self, sender, text="", C1="", C2=""):
         self.sender = sender
         self.text = text
+        self.C1 = C1
+        self.C2 = C2
+
+    
 

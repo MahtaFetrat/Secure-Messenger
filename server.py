@@ -2,7 +2,7 @@ import socket
 from threading import Thread
 from entities import ClientInfo, Chat, Message, GroupInfo
 
-BUFFSIZE = 250
+BUFFSIZE = 175
 
 class Server:
     IP = "127.0.0.1"
@@ -49,10 +49,8 @@ class Server:
                     if self.run_registration_menu(conn) and self.run_login_menu(conn): return
                 if input_option == "1":
                     if self.run_login_menu(conn): return 
-        except ConnectionResetError:
+        except (ConnectionResetError, ConnectionAbortedError):
             print("An existing connection was forcibly closed by the remote host")
-
-
 
     def run_registration_menu(self, conn):
         username = conn.recv(BUFFSIZE).decode()  
@@ -63,7 +61,11 @@ class Server:
         else:
             conn.send("OK".encode())   
             password = conn.recv(BUFFSIZE).decode()
-            self.clients[username] = ClientInfo(username, password, conn)
+            conn.send("ACK".encode())   # ACK
+            elgamal_key = conn.recv(BUFFSIZE).decode()
+            conn.send("ACK".encode())   # ACK
+
+            self.clients[username] = ClientInfo(username, password, conn, elgamal_key)
             return True
         
     def run_login_menu(self, conn):
@@ -77,8 +79,10 @@ class Server:
             ClientHandler(self.clients[username], self).start()
             return True
         else:
+            print(self.clients[username].password)
             conn.send("Login Failed".encode())
             return False
+
 
 class ClientHandler(Thread):
     def __init__(self, client_info, server):
@@ -113,17 +117,15 @@ class ClientHandler(Thread):
         for username in new_chats.keys():
             self.client_info.conn.send(f"{username}".encode())
             self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
-            print(username)
             self.client_info.conn.send(f"{len(new_chats[username].messages)}".encode())
             self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
-            print(len(new_chats[username].messages))
             for message in new_chats[username].messages:
                 self.client_info.conn.send(message.sender.encode())
                 self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
-                print(message.sender)
-                self.client_info.conn.send(message.text.encode())
+                self.client_info.conn.send(message.C1.encode())
                 self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
-                print(message.text)
+                self.client_info.conn.send(message.C2.encode())
+                self.client_info.conn.recv(BUFFSIZE).decode()   # ACK
 
         self.server.new_chats[self.client_info.username] = {}
 
@@ -140,12 +142,34 @@ class ClientHandler(Thread):
             return
         else:
             self.client_info.conn.send("OK".encode())
+
+            if not self.resolve_elgamal_key(username): return
             
-            message = Message(self.client_info.username, self.client_info.conn.recv(BUFFSIZE).decode())
+            C1 = self.client_info.conn.recv(BUFFSIZE).decode()
+            self.client.sock.send("ACK".encode())    # ACK
+            C2 = self.client_info.conn.recv(BUFFSIZE).decode()
+            self.client.sock.send("ACK".encode())    # ACK
+
+            message = Message(self.client_info.username, C1=C1, C2=C2)
             if username in self.server.clients:
                 self.send_private_message(username, message)
             else:
                 self.send_group_message(username, message)
+
+    def resolve_elgamal_key(self, username):
+        request = self.client_info.conn.recv(BUFFSIZE).decode()
+        if request == "OK":
+            return True
+        
+        if username not in self.server.clients:
+            self.client_info.conn.send("User Not Found".encode())
+            return False
+        
+        self.client_info.conn.send("OK".encode())
+        
+        username = self.client_info.conn.recv(BUFFSIZE).decode()
+        elgamal_key = self.server.clients[username].elgamal_key
+        self.client_info.conn.send(elgamal_key.encode())
 
     def send_private_message(self, username, message):
         if username not in self.server.new_chats: self.server.new_chats[username] = {}

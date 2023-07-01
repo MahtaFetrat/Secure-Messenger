@@ -1,5 +1,6 @@
 import hashlib
 import string
+from elgamal import elgamal_encrypt, elgamal_decrypt
 
 
 def sha3_256_hash(message):
@@ -24,16 +25,22 @@ def check_password_strength(password):
         return False
 
 
-def create_end_to_end_message(username, message, sequence_numbers):
+def create_e2e_message(username, message, sequence_numbers, elgamal_key):
+    (q, α, Y), X = elgamal_key.unpack()
+
     FORMAT = "{sequence_numbers}\n\n{message}"
     sequence_numbers[username] += 1
-    return FORMAT.format(
+    formatted_message = FORMAT.format(
         sequence_numbers=sequence_numbers[username],
         message=message
     )
+    return elgamal_encrypt(formatted_message, q, α, Y, elgamal_key.mod_size)
 
-def read_end_to_end_message(username, message, sequence_numbers):
-    splitted_message = message.split("\n\n")
+def read_e2e_message(username, sequence_numbers, C1, C2, elgamal_key):
+    (q, α, Y), X = elgamal_key.unpack()
+
+    decrypted_message = elgamal_decrypt(X, C1, C2, q)
+    splitted_message = decrypted_message.split("\n\n")
     sequence_number = int(splitted_message[0])
     message = '\n\n'.join(splitted_message[1:])
 
