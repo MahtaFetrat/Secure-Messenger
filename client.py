@@ -4,6 +4,7 @@ from entities import Chat, Message
 from utils import sha3_256_hash, check_password_strength, create_e2e_message, read_e2e_message, send, receive
 from random import randint
 from elgamal import elgamal_generate_key, ElgamalKey
+from rsa import client_rsa_keys
 
 BUFFSIZE = 1024
 MESSAGE_SIZE = 175
@@ -188,7 +189,12 @@ class App:
             print(response)
             return False
         
-        self.client.password = sha3_256_hash(self.select_password())
+        plain_pass = self.select_password()
+        self.client.password = sha3_256_hash(plain_pass)    # TODO: do we need to store it
+
+        # define public and private keys of the this clients
+        client_rsa_keys(username=self.client.username, password=plain_pass)
+        
         send(self.client.password, self.client.sock)
         receive(self.client.sock)   # ACK
         (q, α, Y), _ = self.client.elgamal_key.unpack()

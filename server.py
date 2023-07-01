@@ -18,17 +18,7 @@ class Server:
 
         self.groups = {}
 
-        self.new_chats = {}     # dict of (key=user1 who has new chat, value=incomming chat for user1) 
-        # { mahta: {
-        #            fatemeh,
-        #            zeinab,
-        #           },
-        #   mitra: {
-        #            fatemeh
-        #          }
-        #   zeinab: {
-        #           }
-        # }
+        self.new_chats = {}
 
     def up(self):
         self.socket.bind((Server.IP, Server.PORT))
