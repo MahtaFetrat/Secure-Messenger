@@ -1,7 +1,7 @@
 import hashlib
 import string
 from elgamal import elgamal_encrypt, elgamal_decrypt
-import math
+from rsa import send_encrypted_message, receive_encrypted_message
 
 def sha3_256_hash(message):
     hash_object = hashlib.sha3_256()
@@ -47,26 +47,11 @@ def read_e2e_message(username, sequence_numbers, C1, C2, elgamal_key):
     else:
         return sequence_number, message
     
-def send(message, sock, BUFFSIZE=1024):
-    # message_lenght = len(message)
-    # chuncks = math.ceil(message_lenght / BUFFSIZE)
-    # sock.send(str(chuncks).encode())
-    # sock.recv(BUFFSIZE).decode()    # ACK
-    # for chunk in range(chuncks):
-    #     sock.send(message[chunk * BUFFSIZE:(chunk + 1) * BUFFSIZE].encode())
-    #     sock.recv(BUFFSIZE).decode()    # ACK
+def send(message, sock, send_parameters, BUFFSIZE=1024):
+    receiver_public_key_path, sender_private_key_path, password_hash = send_parameters
+    send_encrypted_message(sock, message, receiver_public_key_path, sender_private_key_path, password_hash)
 
-    sock.send(message.encode())
 
-def receive(sock, BUFFSIZE=1024):
-    # chunks = int(sock.recv(BUFFSIZE).decode())
-    # sock.send("ACK".encode())
-
-    # message_parts = []
-    # for _ in range(chunks):
-    #     message_parts.append(sock.recv(BUFFSIZE).decode())
-    #     sock.send("ACK".encode())    # ACK
-
-    # return ''.join(message_parts)
-
-    return sock.recv(BUFFSIZE).decode()
+def receive(sock, receive_parameters, BUFFSIZE=1024):
+    receiver_private_key_path, sender_public_key_path, password_hash = receive_parameters
+    receive_encrypted_message(sock, receiver_private_key_path, sender_public_key_path, password_hash)

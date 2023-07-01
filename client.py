@@ -29,6 +29,10 @@ class App:
         self.chats = {}
         self.sequence_numbers = {}
         self.elgamal_keys = {}
+        
+        print(self.client.username)
+        self.send_parameters = 'public_key.pem', f'private_key_{self.client.username}.pem', self.client.password
+        self.receive_parameters = f'private_key_{self.client.username}.pem', 'public_key.pem', self.client.password
 
         self.APP_MENU_OPTIONS = ["See inbox", "See online users", "Send a message", "Create new group", "Add group member", "Remove group member", "See chat", "Quit"]
         self.APP_MENU_FUNCTIONS = [self.see_inbox_menu, self.see_online_users, self.send_message_menu, self.create_new_group, self.add_group_member, self.remove_group_member]
@@ -48,10 +52,10 @@ class App:
 
         input_option = int(input())
         if input_option == 2:
-            send("2", self.client.sock)
+            self.client.sock.send("2".encode())
             return self.register() and self.login()
         if input_option == 1:
-            send("1", self.client.sock)
+            self.client.sock.send("1".encode())
             return self.login()
         
         return False
@@ -69,7 +73,7 @@ class App:
             self.see_chat_menu()
             return False
         
-        send(f"{input_option}", self.client.sock)
+        send(f"{input_option}", self.client.sock, self.send_parameters)
         self.APP_MENU_FUNCTIONS[input_option - 1]()
         return False
 
@@ -79,21 +83,21 @@ class App:
             print(f"{username} [{chat.unread_message_count}]" if chat.unread_message_count else username)
 
     def update_unread_messages(self):
-        new_chat_count = int(receive(self.client.sock))
-        send("ACK", self.client.sock)
+        new_chat_count = int(receive(self.client.sock, self.receive_parameters))
+        send("ACK", self.client.sock, self.send_parameters)
         for _ in range(new_chat_count):
-            username = receive(self.client.sock)
-            send("ACK", self.client.sock)
+            username = receive(self.client.sock, self.receive_parameters)
+            send("ACK", self.client.sock, self.send_parameters)
             if username not in self.chats: self.chats[username] = Chat(username)
-            new_messages = int(receive(self.client.sock))
-            send("ACK", self.client.sock)
+            new_messages = int(receive(self.client.sock, self.receive_parameters))
+            send("ACK", self.client.sock, self.send_parameters)
             for _ in range(new_messages):
-                sender = receive(self.client.sock)
-                send("ACK", self.client.sock)
-                C1 = receive(self.client.sock)
-                send("ACK", self.client.sock)
-                C2 = receive(self.client.sock)
-                send("ACK", self.client.sock)
+                sender = receive(self.client.sock, self.receive_parameters)
+                send("ACK", self.client.sock, self.send_parameters)
+                C1 = receive(self.client.sock, self.receive_parameters)
+                send("ACK", self.client.sock, self.send_parameters)
+                C2 = receive(self.client.sock, self.receive_parameters)
+                send("ACK", self.client.sock, self.send_parameters)
                 sequence_number, message = read_e2e_message(username, self.sequence_numbers, C1, C2, self.client.elgamal_key)
                 if sequence_number: 
                     self.chats[username].unread_message_count += 1
@@ -121,7 +125,7 @@ class App:
         self.chats[username].unread_message_count = 0
 
     def see_online_users(self):
-        online_users = receive(self.client.sock)
+        online_users = receive(self.client.sock, self.receive_parameters)
         print(online_users)
 
     def send_message_menu(self):
@@ -129,8 +133,8 @@ class App:
 
         print("Please enter the chat you want to send a message to:")
         username = input()
-        send(username, self.client.sock)
-        response = receive(self.client.sock)
+        send(username, self.client.sock, self.send_parameters)
+        response = receive(self.client.sock, self.receive_parameters)
         if response != "User Found" and response != "Group Found":
             print(response)
             return
@@ -153,53 +157,68 @@ class App:
         self.resolve_elgamal_key(username)
 
         C1, C2 = create_e2e_message(message, sequence_number, self.elgamal_keys[username])
-        send(C1, self.client.sock)
-        receive(self.client.sock)    # ACK
-        send(C2, self.client.sock)
-        receive(self.client.sock)    # ACK
+        send(C1, self.client.sock, self.send_parameters)
+        receive(self.client.sock, self.receive_parameters)    # ACK
+        send(C2, self.client.sock, self.send_parameters)
+        receive(self.client.sock, self.receive_parameters)    # ACK
 
     def send_message_to_group(self, username, message, sequence_number):
-        user_count = int(receive(self.client.sock))
-        send("ACK", self.client.sock)   # ACK
+        user_count = int(receive(self.client.sock, self.receive_parameters))
+        send("ACK", self.client.sock, self.send_parameters)   # ACK
 
         for _ in range(user_count):
-            username = receive(self.client.sock)
-            send("ACK", self.client.sock)   # ACK
+            username = receive(self.client.sock, self.receive_parameters)
+            send("ACK", self.client.sock, self.send_parameters)   # ACK
 
             self.send_message_to_user(username, message, sequence_number)
 
     def resolve_elgamal_key(self, username):
         if username not in self.elgamal_keys:
-            send("Get Key", self.client.sock)
-            key_params = receive(self.client.sock)
-            (q, α, Y) = tuple(map(int, key_params.split('\n\n')))
+            send("Get Key", self.client.sock, self.send_parameters)
+            q = int(receive(self.client.sock, self.receive_parameters))
+            send("ACK", self.client.sock, self.send_parameters)   # ACK
+            α = int(receive(self.client.sock, self.receive_parameters))
+            send("ACK", self.client.sock, self.send_parameters)   # ACK
+            Y = int(receive(self.client.sock, self.receive_parameters))
             self.elgamal_keys[username] = ElgamalKey(q, α, Y)
         else:
-            send("OK", self.client.sock)
+            send("OK", self.client.sock, self.send_parameters)
 
         return True
 
     def register(self):
         print("Please pick a username:")
         self.client.username = input()
-        send(self.client.username, self.client.sock)
+        self.client.sock.send(self.client.username.encode())
 
-        response = receive(self.client.sock)
+        response = self.client.sock.recv(BUFFSIZE).decode()
         if response != "OK":
             print(response)
             return False
         
-        plain_pass = self.select_password()
-        self.client.password = sha3_256_hash(plain_pass)    # TODO: do we need to store it
+        self.client.password = sha3_256_hash(self.select_password())
 
         # define public and private keys of the this clients
-        client_rsa_keys(username=self.client.username, password=plain_pass)
+        client_rsa_keys(username=self.client.username, password=self.client.password)
         
-        send(self.client.password, self.client.sock)
-        receive(self.client.sock)   # ACK
+        print("here")
+
+        send(self.client.password, self.client.sock, ('public_key.pem', f'private_key_{self.client.username}.pem', self.client.password))
+        print("ho")
+        receive(self.client.sock, (f'private_key_{self.client.username}.pem', 'public_key.pem', self.client.password))   # ACK
+        
+        print("here")
+
         (q, α, Y), _ = self.client.elgamal_key.unpack()
-        send('\n\n'.join(map(str, [q, α, Y])), self.client.sock)
-        receive(self.client.sock)   # ACK
+        send(str(q), self.client.sock, ('public_key.pem', f'private_key_{self.client.username}.pem', self.client.password))
+        receive(self.client.sock, (f'private_key_{self.client.username}.pem', 'public_key.pem', self.client.password))   # ACK
+        send(str(α), self.client.sock, ('public_key.pem', f'private_key_{self.client.username}.pem', self.client.password))
+        receive(self.client.sock, (f'private_key_{self.client.username}.pem', 'public_key.pem', self.client.password))   # ACK
+        send(str(Y), self.client.sock, ('public_key.pem', f'private_key_{self.client.username}.pem', self.client.password))
+        receive(self.client.sock, (f'private_key_{self.client.username}.pem', 'public_key.pem', self.client.password))   # ACK
+        
+        print("here")
+        
         return True
 
 
@@ -214,13 +233,14 @@ class App:
 
     def login(self):
         print("Please enter your username:")
-        send(input(), self.client.sock)
+        self.client.username = input()
+        send(self.client.username, self.client.sock, self.send_parameters)
         
         print("Please enter your password:")
         hashed_password = sha3_256_hash(input())
-        send(hashed_password, self.client.sock)
+        send(hashed_password, self.client.sock, self.send_parameters)
 
-        response = receive(self.client.sock)
+        response = receive(self.client.sock, self.receive_parameters)
         if response == "OK": return True
         else:
             print(response)
@@ -229,8 +249,8 @@ class App:
     def create_new_group(self):
         print("Please enter the name of the group:")
         username = input()
-        send(username, self.client.sock)
-        response = receive(self.client.sock)
+        send(username, self.client.sock, self.send_parameters)
+        response = receive(self.client.sock, self.receive_parameters)
         if response != "OK":
             print(response)
             return
@@ -240,40 +260,40 @@ class App:
     def send_group_members(self):
         print("How many members you want to add now?")
         member_count = int(input())
-        send(f"{member_count}", self.client.sock)
+        send(f"{member_count}", self.client.sock, self.send_parameters)
         for _ in range(member_count):
             print("Please enter the next username to add")
             username = input()
-            send(username, self.client.sock)
-            response = receive(self.client.sock)
+            send(username, self.client.sock, self.send_parameters)
+            response = receive(self.client.sock, self.receive_parameters)
             print(response)
 
     def add_group_member(self):
         print("Please enter the group name")
         username = input()
-        send(username, self.client.sock)
-        response = receive(self.client.sock)
+        send(username, self.client.sock, self.send_parameters)
+        response = receive(self.client.sock, self.receive_parameters)
         if response != "OK":
             print(response)
             return
         print("Please enter the username to add")
         user = input()
-        send(user, self.client.sock)
-        response = receive(self.client.sock)
+        send(user, self.client.sock, self.send_parameters)
+        response = receive(self.client.sock, self.receive_parameters)
         print(response)
 
     def remove_group_member(self):
         print("Please enter the group name")
         username = input()
-        send(username, self.client.sock)
-        response = receive(self.client.sock)
+        send(username, self.client.sock, self.send_parameters)
+        response = receive(self.client.sock, self.receive_parameters)
         if response != "OK":
             print(response)
             return
         print("Please enter the username to remove")
         user = input()
-        send(user, self.client.sock)
-        response = receive(self.client.sock)
+        send(user, self.client.sock, self.send_parameters)
+        response = receive(self.client.sock, self.receive_parameters)
         print(response)
 
 
